@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Interactive atlas of ADM1 regional co-occurrence networks in AI-related news, 2016–2025." />
+  <title>Global AI Regional Network Atlas</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <header class="project-header">
+        <div class="eyebrow">WORKING PAPER · INTERACTIVE ATLAS</div>
+        <h1>Global AI Regional Network Atlas</h1>
+        <p class="subtitle">Regional co-occurrence networks in AI-related news · 2016–2025</p>
+        <p class="paper-title">Measuring Global AI Cooperation, Competition and Innovation through News Text: A Graph-based Approach</p>
+      </header>
+
+      <section class="control-section">
+        <div class="section-heading">Time</div>
+        <div class="year-row">
+          <button id="prevYear" class="icon-button" aria-label="Previous year">‹</button>
+          <button id="playYear" class="icon-button play-button" aria-label="Play years">▶</button>
+          <button id="nextYear" class="icon-button" aria-label="Next year">›</button>
+          <div class="year-value" id="yearValue">2016</div>
+        </div>
+        <input id="yearSlider" type="range" min="2016" max="2025" value="2016" step="1" aria-label="Year" />
+      </section>
+
+      <section class="control-section">
+        <div class="section-heading">Network display</div>
+        <label class="field-label" for="metricSelect">Region activity</label>
+        <select id="metricSelect">
+          <option value="weighted_degree">Weighted co-occurrence degree</option>
+          <option value="documents">Unique AI-news documents</option>
+          <option value="location_mentions">Location mentions</option>
+          <option value="degree">Unique regional partners</option>
+        </select>
+
+        <label class="field-label" for="scopeSelect">Connections</label>
+        <select id="scopeSelect">
+          <option value="all">All co-occurrence links</option>
+          <option value="international">International links only</option>
+          <option value="domestic">Within-country links only</option>
+        </select>
+
+        <label class="field-label" for="linkLimit">Strongest links shown</label>
+        <select id="linkLimit">
+          <option value="100">Top 100</option>
+          <option value="250" selected>Top 250</option>
+          <option value="500">Top 500</option>
+          <option value="1000">Top 1,000</option>
+          <option value="all">All</option>
+        </select>
+
+        <label class="field-label" for="nodeSize">Node size</label>
+        <select id="nodeSize">
+          <option value="weighted_degree">Weighted degree</option>
+          <option value="documents">Unique documents</option>
+          <option value="degree">Regional partners</option>
+          <option value="uniform">Uniform</option>
+        </select>
+
+        <label class="toggle-row"><input id="fillToggle" type="checkbox" checked /> <span>Shade ADM1 regions by activity</span></label>
+        <label class="toggle-row"><input id="labelToggle" type="checkbox" /> <span>Label leading regions</span></label>
+      </section>
+
+      <section class="control-section">
+        <div class="section-heading">Find a region</div>
+        <div class="search-row">
+          <input id="searchInput" type="search" placeholder="Region or country code" list="regionOptions" autocomplete="off" />
+          <datalist id="regionOptions"></datalist>
+          <button id="searchButton" class="small-button">Find</button>
+        </div>
+        <div class="button-row">
+          <button id="fitButton" class="secondary-button">Fit world</button>
+          <button id="clearButton" class="secondary-button">Clear focus</button>
+        </div>
+      </section>
+
+      <section class="stats-grid" aria-label="Year summary">
+        <div class="stat"><span class="stat-label">Active regions</span><strong id="statRegions">—</strong></div>
+        <div class="stat"><span class="stat-label">Visible links</span><strong id="statLinks">—</strong></div>
+        <div class="stat"><span class="stat-label">Co-occurrences</span><strong id="statWeight">—</strong></div>
+        <div class="stat"><span class="stat-label">International share</span><strong id="statIntl">—</strong></div>
+      </section>
+
+      <section class="selected-card" id="selectedCard" hidden>
+        <div class="section-heading">Selected region</div>
+        <h2 id="selectedName">—</h2>
+        <div class="selected-metrics">
+          <div><span>Documents</span><strong id="selDocs">—</strong></div>
+          <div><span>Mentions</span><strong id="selMentions">—</strong></div>
+          <div><span>Weighted degree</span><strong id="selWeighted">—</strong></div>
+          <div><span>Partners</span><strong id="selDegree">—</strong></div>
+        </div>
+        <div class="partner-title">Strongest co-mentioned regions</div>
+        <ol id="partnerList" class="partner-list"></ol>
+      </section>
+
+      <footer class="sidebar-footer">
+        <p><strong>Interpretation.</strong> A link means that two ADM1 regions were mentioned in the same filtered AI-related news document. It does not, by itself, establish direct cooperation or competition.</p>
+        <p><strong>Coverage.</strong> All ADM1 units in the supplied global boundary file remain visible. Regions with zero activity in the selected year are shown in light grey.</p>
+        <p><a href="docs/data-and-privacy.html">Data and privacy note</a></p>
+      </footer>
+    </aside>
+
+    <section class="map-panel">
+      <div class="map-toolbar">
+        <div>
+          <span class="toolbar-kicker">AI NEWS CO-OCCURRENCE NETWORK</span>
+          <span class="toolbar-year" id="toolbarYear">2016</span>
+        </div>
+        <div class="toolbar-note" id="toolbarNote">Top 250 strongest links</div>
+      </div>
+
+      <svg id="mapSvg" class="map-svg" viewBox="0 0 14400 7200" role="img" aria-label="World map showing ADM1 regions connected by co-occurrence in AI-related news">
+        <rect class="ocean" x="0" y="0" width="14400" height="7200"></rect>
+        <g id="baseLayer"></g>
+        <g id="regionLayer"></g>
+        <g id="edgeLayer"></g>
+        <g id="nodeLayer"></g>
+        <g id="labelLayer"></g>
+      </svg>
+
+      <div class="legend" id="legend">
+        <div class="legend-title" id="legendTitle">Weighted co-occurrence degree</div>
+        <div class="legend-scale"><span></span></div>
+        <div class="legend-values"><span>0 / no activity</span><span>Higher</span></div>
+      </div>
+
+      <div class="tooltip" id="tooltip" hidden></div>
+      <div class="map-help">Scroll to zoom · drag to pan · click a region to inspect its network</div>
+    </section>
+  </main>
+  <script src="assets/app.js"></script>
+</body>
+</html>
