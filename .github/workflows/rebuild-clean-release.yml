@@ -1,0 +1,255 @@
+name: Rebuild and publish clean Global AI atlas
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/rebuild-clean-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: global-ai-atlas-clean-release
+  cancel-in-progress: false
+
+jobs:
+  rebuild-publish-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository archive sources
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Locate and reconstruct clean deployment archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/public-site /tmp/archive-test /tmp/archive-joined /tmp/archive-bin
+          mkdir -p /tmp/public-site
+
+          found=""
+          mapfile -t candidate_dirs < <(
+            find . -type f \( -name 'part-*' -o -name '*part-[0-9]*' -o -name '*part_[0-9]*' \) \
+              -printf '%h\n' | sort -u
+          )
+
+          echo "Candidate archive directories: ${#candidate_dirs[@]}"
+
+          for dir in "${candidate_dirs[@]}"; do
+            mapfile -t parts < <(
+              find "$dir" -maxdepth 1 -type f \
+                \( -name 'part-*' -o -name '*part-[0-9]*' -o -name '*part_[0-9]*' \) \
+                -print | sort -V
+            )
+            [ "${#parts[@]}" -gt 0 ] || continue
+
+            echo "Testing $dir (${#parts[@]} parts)"
+            cat "${parts[@]}" > /tmp/archive-joined
+
+            for encoding in base64 raw; do
+              rm -rf /tmp/archive-test
+              mkdir -p /tmp/archive-test
+
+              if [ "$encoding" = base64 ]; then
+                base64 --decode /tmp/archive-joined > /tmp/archive-bin 2>/dev/null || continue
+              else
+                cp /tmp/archive-joined /tmp/archive-bin
+              fi
+
+              xz -t /tmp/archive-bin 2>/dev/null || continue
+              tar -tJf /tmp/archive-bin >/dev/null 2>&1 || continue
+              tar -xJf /tmp/archive-bin -C /tmp/archive-test
+
+              while IFS= read -r index_file; do
+                root="$(dirname "$index_file")"
+                if [ -f "$root/assets/app.js" ] && \
+                   [ -f "$root/assets/styles.css" ] && \
+                   [ -f "$root/data/manifest.json" ] && \
+                   [ -f "$root/data/meta.json" ] && \
+                   [ -f "$root/docs/source-rebuild-audit.md" ] && \
+                   [ -f "$root/data/packs/map-10.txt" ] && \
+                   [ -f "$root/data/packs/years-10.txt" ]; then
+                  rm -rf /tmp/public-site
+                  mkdir -p /tmp/public-site
+                  cp -a "$root"/. /tmp/public-site/
+                  found="$dir ($encoding)"
+                  break 3
+                fi
+              done < <(find /tmp/archive-test -type f -name index.html | sort)
+            done
+          done
+
+          if [ -z "$found" ]; then
+            echo "No complete clean deployment archive was found." >&2
+            find . -maxdepth 4 -type f | sort >&2
+            exit 1
+          fi
+
+          echo "Selected archive: $found"
+          find /tmp/public-site -type f | sort
+
+      - name: Validate public data and browser resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/public-site
+
+          test -f index.html
+          test -f assets/app.js
+          test -f assets/styles.css
+          test -f data/manifest.json
+          test -f data/meta.json
+          test -f docs/validation-results.json
+
+          node --check assets/app.js
+          if [ -f assets/core.js ]; then node --check assets/core.js; fi
+
+          python3 - <<'PY'
+          import base64, gzip, json
+          from pathlib import Path
+
+          root = Path('.')
+          manifest = json.loads((root/'data/manifest.json').read_text(encoding='utf-8'))
+          meta = json.loads((root/'data/meta.json').read_text(encoding='utf-8'))
+          validation = json.loads((root/'docs/validation-results.json').read_text(encoding='utf-8'))
+
+          assert len(manifest['map']) == 11, manifest
+          assert len(manifest['years']) == 11, manifest
+          assert meta['region_count'] == 3223
+          assert meta['source_adm1_features'] == 3224
+          assert meta['years'] == list(range(2016, 2026))
+          assert validation['status'] == 'pass'
+          assert validation['public_map_regions'] == 3223
+          assert validation['network_regions_missing_geometry'] == 0
+          assert validation['checks']['article_text_removed'] is True
+          assert validation['checks']['document_urls_removed'] is True
+          assert validation['checks']['news_source_names_removed'] is True
+          assert validation['checks']['raw_location_strings_removed'] is True
+          assert validation['checks']['original_shape_ids_removed'] is True
+          assert validation['checks']['document_level_records_removed'] is True
+
+          def joined(paths):
+              return ''.join((root/p).read_text(encoding='utf-8').strip() for p in paths)
+
+          map_obj = json.loads(gzip.decompress(base64.b64decode(joined(manifest['map']))))
+          assert len(map_obj['r']) == 3223
+
+          raw = gzip.decompress(base64.b64decode(joined(manifest['years'])))
+          assert raw[:4] == b'AIR1'
+          pos = 4
+
+          def varint():
+              nonlocal_box = None
+              global pos
+              value = 0
+              shift = 0
+              while True:
+                  b = raw[pos]
+                  pos += 1
+                  value |= (b & 127) << shift
+                  if not (b & 128):
+                      return value
+                  shift += 7
+
+          block_count = varint()
+          assert block_count == 10
+          summaries = {}
+
+          for _ in range(block_count):
+              block_len = varint()
+              end = pos + block_len
+              year = 2016 + varint()
+              node_count = varint()
+              edge_count = varint()
+              active_regions = varint()
+              links = varint()
+              weight = varint()
+              intl_share = varint() / 10000
+
+              region = 0
+              for _ in range(node_count):
+                  region += varint()
+                  for __ in range(4): varint()
+                  varint()
+
+              source = target = 0
+              for _ in range(edge_count):
+                  source_delta = varint()
+                  if source_delta:
+                      source += source_delta
+                      target = 0
+                  target += varint()
+                  varint()
+                  pos += 1
+
+              assert pos == end, (year, pos, end)
+              assert node_count == active_regions
+              assert edge_count == links
+              summaries[year] = (active_regions, links, weight, intl_share)
+
+          assert summaries[2016][:3] == (494, 5673, 14112), summaries[2016]
+          assert summaries[2025][:3] == (686, 6955, 18459), summaries[2025]
+
+          forbidden_ext = {'.xlsx','.xls','.csv','.geojson','.zip','.pdf','.gephi','.sqlite','.db'}
+          assert not any(p.suffix.lower() in forbidden_ext for p in root.rglob('*') if p.is_file())
+
+          print('Validated 3,223 ADM1 units and ten annual network blocks.')
+          print('2016:', summaries[2016])
+          print('2025:', summaries[2025])
+          PY
+
+      - name: Create one clean release commit and force both refs
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd /tmp/public-site
+          rm -rf .git .github .bootstrap .deploy-source
+          touch .nojekyll
+
+          git init -b release
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Publish clean source-rebuilt Global AI Regional Network Atlas"
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force origin HEAD:refs/heads/gh-pages
+          git push --force origin HEAD:refs/heads/main
+
+      - name: Verify published resources over HTTPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          site="https://junyaohe001.github.io/global-ai-network-atlas"
+          resources=(
+            "/"
+            "/assets/app.js"
+            "/data/manifest.json"
+            "/data/meta.json"
+            "/data/packs/map-10.txt"
+            "/data/packs/years-10.txt"
+          )
+
+          for attempt in $(seq 1 40); do
+            ok=1
+            stamp="$(date +%s)"
+            for resource in "${resources[@]}"; do
+              code="$(curl -L -sS -o /tmp/page-check -w '%{http_code}' "${site}${resource}?v=${stamp}" || true)"
+              echo "$resource -> $code"
+              [ "$code" = 200 ] || ok=0
+            done
+            if [ "$ok" = 1 ]; then
+              echo "All published resources returned HTTP 200."
+              exit 0
+            fi
+            sleep 10
+          done
+
+          echo "GitHub Pages did not expose all resources within the verification window." >&2
+          exit 1
