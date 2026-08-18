@@ -1,0 +1,135 @@
+name: Publish Global AI Regional Network Atlas
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-global-ai-network-atlas
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct and validate v2 public site
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          parts=(
+            .bootstrap/site/part-000
+            .bootstrap/site/part-001
+            .bootstrap/site/part-002
+            .bootstrap/site/part-003
+            .bootstrap/site/part-004
+            .bootstrap/site/part-005
+            .bootstrap/site/part-006
+            .bootstrap/site/part-007
+            .bootstrap/site/part-008
+            .bootstrap/site/part-009
+            .bootstrap/site/part-010
+            .bootstrap/v2/part-011
+            .bootstrap/v2/part-012
+            .bootstrap/v2/part-013
+            .bootstrap/v2/part-014
+            .bootstrap/v2/part-015
+            .bootstrap/v2/part-016
+            .bootstrap/v2/part-017
+            .bootstrap/v2/part-018
+            .bootstrap/v2/part-019
+            .bootstrap/v2/part-020
+            .bootstrap/v2/part-021
+            .bootstrap/v2/part-022
+          )
+
+          for part in "${parts[@]}"; do
+            test -f "$part"
+          done
+
+          cat "${parts[@]}" > /tmp/global-ai-atlas.tar.xz.b64
+          test "$(wc -c < /tmp/global-ai-atlas.tar.xz.b64)" -eq 316956
+          base64 --decode /tmp/global-ai-atlas.tar.xz.b64 > /tmp/global-ai-atlas.tar.xz
+          echo "de33730b8cdeb68cdee7a05885dad8f3ef1349a6c740410db00356b657f9a984  /tmp/global-ai-atlas.tar.xz" | sha256sum -c -
+          xz -t /tmp/global-ai-atlas.tar.xz
+
+          rm -rf /tmp/global-ai-atlas
+          mkdir -p /tmp/global-ai-atlas
+          tar -xJf /tmp/global-ai-atlas.tar.xz -C /tmp/global-ai-atlas
+
+          required=(
+            /tmp/global-ai-atlas/index.html
+            /tmp/global-ai-atlas/assets/app.js
+            /tmp/global-ai-atlas/assets/styles.css
+            /tmp/global-ai-atlas/data/manifest.json
+            /tmp/global-ai-atlas/data/meta.json
+            /tmp/global-ai-atlas/docs/data-and-privacy.html
+            /tmp/global-ai-atlas/docs/validation-results.json
+          )
+          for file in "${required[@]}"; do
+            test -f "$file"
+          done
+
+          node --check /tmp/global-ai-atlas/assets/app.js
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path('/tmp/global-ai-atlas')
+          meta = json.loads((root / 'data/meta.json').read_text(encoding='utf-8'))
+          validation = json.loads((root / 'docs/validation-results.json').read_text(encoding='utf-8'))
+          manifest = json.loads((root / 'data/manifest.json').read_text(encoding='utf-8'))
+
+          assert meta['years'] == list(range(2016, 2026))
+          assert meta['region_count'] == 3223
+          assert meta['source_adm1_features'] == 3224
+          assert validation['status'] == 'pass'
+          assert validation['public_map_regions'] == 3223
+          assert validation['checks']['all_supplied_adm1_geometries_retained'] is True
+          assert validation['checks']['zero_value_regions_visible_and_clickable'] is True
+          assert validation['checks']['article_text_removed'] is True
+          assert validation['checks']['document_urls_removed'] is True
+          assert validation['checks']['news_source_names_removed'] is True
+          assert validation['checks']['raw_location_strings_removed'] is True
+          assert validation['checks']['local_paths_removed'] is True
+          assert validation['checks']['original_shape_ids_removed'] is True
+          assert validation['checks']['document_level_records_removed'] is True
+          assert meta['privacy']['only_aggregated_network_and_simplified_geography'] is True
+          assert len(manifest['map']) == 11
+          assert len(manifest['years']) == 11
+
+          forbidden = {'.xlsx', '.xls', '.csv', '.geojson', '.zip', '.pdf', '.gephi'}
+          assert not any(p.suffix.lower() in forbidden for p in root.rglob('*') if p.is_file())
+          print('v2 public site and privacy boundary validated.')
+          PY
+
+      - name: Publish clean static site to gh-pages
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd /tmp/global-ai-atlas
+          rm -rf .git .github .bootstrap
+          touch .nojekyll
+
+          git init -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Publish Global AI Regional Network Atlas v2"
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force origin gh-pages
