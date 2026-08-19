@@ -1,1 +1,0 @@
-{"format":"ai-regional-network-atlas-v2","map":["data/map.txt"],"years":["data/years.txt"],"map_encoding":"base64-gzip-json","years_encoding":"base64-gzip-binary","years_binary_schema":"AIR1","map_chunk_count":1,"years_chunk_count":1}
