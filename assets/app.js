@@ -1,11 +1,14 @@
 (() => {
+  'use strict';
+  const BUILD = '20260819-clean-v1';
+  window.__ATLAS_READY__ = false;
   const SVG_NS = 'http://www.w3.org/2000/svg';
   const years = Array.from({length: 10}, (_, i) => 2016 + i);
   const nodeFields = { region:0, documents:1, location_mentions:2, weighted_degree:3, degree:4, international_weight_share:5 };
   const state = {
     year: 2016, metric:'weighted_degree', scope:'all', linkLimit:250, nodeSize:'weighted_degree',
     fill:true, labels:false, selected:null, playing:false, playTimer:null,
-    map:null, data:null, nodeMap:new Map(), view:[0,0,1200,600]
+    map:null, data:null, nodeMap:new Map(), view:[0,0,14400,7200]
   };
   const $ = id => document.getElementById(id);
   const fmt = new Intl.NumberFormat('en-US');
@@ -41,85 +44,31 @@
   function radiusFor(v,max) {
     if (!max) return 10;
     const t=Math.sqrt(Math.max(0,v)/max);
-    return 1.2 + 4.6*t;
+    return 12 + 46*t;
   }
   function edgeWidth(w,max) {
     if (!max) return 0.7;
-    return 0.5 + 3.2*Math.sqrt(w/max);
+    return 0.6 + 4.5*Math.sqrt(w/max);
   }
 
-  let dataManifest = null;
-  let allYears = new Map();
-
-  async function loadPackedBytes(urls) {
-    const files = Array.isArray(urls) ? urls : [urls];
-    const chunks = await Promise.all(files.map(url => fetch(url).then(r => { if (!r.ok) throw new Error(`Failed to load ${url}`); return r.text(); })));
-    const b64 = chunks.join('').trim();
-    const binary = atob(b64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    if (!('DecompressionStream' in window)) throw new Error('This browser does not support gzip decompression.');
-    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-    return new Uint8Array(await new Response(stream).arrayBuffer());
-  }
-
-  async function loadPackedJSON(urls) {
-    const bytes = await loadPackedBytes(urls);
-    return JSON.parse(new TextDecoder().decode(bytes));
-  }
-
-  function readVarint(bytes, pos) {
-    let n = 0, shift = 0, b;
-    do { b = bytes[pos.i++]; n |= (b & 127) << shift; shift += 7; } while (b & 128);
-    return n >>> 0;
-  }
-
-  function decodeAllYears(bytes) {
-    if (String.fromCharCode(...bytes.slice(0,4)) !== 'AIR1') throw new Error('Invalid year-data bundle');
-    const pos = {i:4};
-    const count = readVarint(bytes,pos);
-    const out = new Map();
-    for (let k=0;k<count;k++) {
-      const blockLen = readVarint(bytes,pos);
-      const end = pos.i + blockLen;
-      const year = 2016 + readVarint(bytes,pos);
-      const nodeCount = readVarint(bytes,pos), edgeCount = readVarint(bytes,pos);
-      const regions = readVarint(bytes,pos), links = readVarint(bytes,pos), cooccurrenceWeight = readVarint(bytes,pos), intlShare = readVarint(bytes,pos)/10000;
-      const nodes=[]; let region=0;
-      for(let i=0;i<nodeCount;i++){
-        region += readVarint(bytes,pos);
-        nodes.push([region,readVarint(bytes,pos),readVarint(bytes,pos),readVarint(bytes,pos),readVarint(bytes,pos),readVarint(bytes,pos)/10000]);
-      }
-      const edges=[]; let source=0,target=0;
-      for(let i=0;i<edgeCount;i++){
-        const sd=readVarint(bytes,pos);
-        if(sd){source+=sd;target=0;}
-        target+=readVarint(bytes,pos);
-        edges.push([source,target,readVarint(bytes,pos),bytes[pos.i++]]);
-      }
-      if(pos.i!==end) throw new Error(`Corrupt year block ${year}`);
-      edges.sort((a,b)=>b[2]-a[2]);
-      out.set(year,{year,nodes,edges,summary:{y:year,regions,links,cooccurrence_weight:cooccurrenceWeight,international_weight_share:intlShare}});
-    }
-    return out;
+  async function fetchJson(path) {
+    const sep = path.includes('?') ? '&' : '?';
+    const response = await fetch(`${path}${sep}v=${BUILD}`, {cache:'no-store'});
+    if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
+    return response.json();
   }
 
   async function loadBase() {
-    const [meta,manifest] = await Promise.all([fetch('data/meta.json').then(r=>r.json()), fetch('data/manifest.json').then(r=>r.json())]);
-    dataManifest = manifest;
-    const [packed,yearBytes] = await Promise.all([loadPackedJSON(manifest.map), loadPackedBytes(manifest.years)]);
-    allYears = decodeAllYears(yearBytes);
-    const map = {
-      viewBox: packed.v,
-      base: '',
-      regions: packed.r.map((r,i) => ({i, n:r[0], c:packed.c[r[1]], x:r[2], y:r[3], d:r[4]}))
-    };
+    const [meta,map] = await Promise.all([fetchJson('data/meta.json'), fetchJson('data/map.json')]);
+    if (!Array.isArray(map.regions) || map.regions.length !== 3223) throw new Error(`Unexpected ADM1 count: ${map.regions?.length}`);
     state.map = map;
-    state.view = map.viewBox.slice();
     map.regions.forEach(r => regionById.set(r.i,r));
-    if (map.base) { const base = el('path',{d:map.base,class:'base-map','fill-rule':'evenodd'}); baseLayer.appendChild(base); }
+    const base = el('path',{d:map.base,class:'base-map','fill-rule':'evenodd'});
+    baseLayer.appendChild(base);
     map.regions.forEach(r => {
-      const p=el('path',{d:r.d,class:'region-shape zero','data-region':r.i,'fill-rule':'evenodd'});
+      const p = r.d
+        ? el('path',{d:r.d,class:'region-shape zero','data-region':r.i,'fill-rule':'evenodd'})
+        : el('circle',{cx:r.x,cy:r.y,r:15,class:'region-shape zero tiny-region','data-region':r.i});
       p.addEventListener('mousemove', ev => showRegionTooltip(ev,r.i));
       p.addEventListener('mouseleave', hideTooltip);
       p.addEventListener('click', ev => { ev.stopPropagation(); focusRegion(r.i); });
@@ -134,8 +83,9 @@
 
   async function loadYear(y) {
     state.year = y;
-    state.data = allYears.get(y);
-    if (!state.data) throw new Error(`Missing year ${y}`);
+    state.data = await fetchJson(`data/years/${y}.json`);
+    if (state.data.year !== y || !Array.isArray(state.data.nodes) || !Array.isArray(state.data.edges)) throw new Error(`Invalid data for ${y}`);
+    state.data.edges.sort((a,b)=>b[2]-a[2]);
     state.nodeMap = new Map(state.data.nodes.map(n=>[n[0],n]));
     $('yearSlider').value=y; $('yearValue').textContent=y; $('toolbarYear').textContent=y;
     render();
@@ -164,7 +114,7 @@
     const dx=x2-x1,dy=y2-y1,dist=Math.sqrt(dx*dx+dy*dy);
     const mx=(x1+x2)/2,my=(y1+y2)/2;
     const nx=dist?(-dy/dist):0,ny=dist?(dx/dist):0;
-    const bend=Math.min(44,dist*.13);
+    const bend=Math.min(520,dist*.13);
     const cx=mx+nx*bend,cy=my+ny*bend;
     return `M${x1},${y1}Q${cx},${cy} ${x2},${y2}`;
   }
@@ -234,7 +184,7 @@
 
   function addLabel(id){
     const r=regionById.get(id); if(!r)return;
-    const t=el('text',{x:r.x+6,y:r.y-5,class:'node-label'}); t.textContent=r.n; labelLayer.appendChild(t);
+    const t=el('text',{x:r.x+70,y:r.y-55,class:'node-label'}); t.textContent=r.n; labelLayer.appendChild(t);
   }
 
   function showRegionTooltip(ev,id){
@@ -281,7 +231,7 @@
     const match=state.map.regions.find(r=>`${r.n}, ${r.c}`.toLowerCase()===q) || state.map.regions.find(r=>r.n.toLowerCase().includes(q)||r.c.toLowerCase()===q);
     if(!match)return;
     focusRegion(match.i);
-    setView([match.x-90,match.y-58,180,116]);
+    setView([match.x-1100,match.y-700,2200,1400]);
   }
 
   function setView(v){
@@ -326,7 +276,7 @@
     svg.addEventListener('wheel',e=>{
       e.preventDefault(); const rect=svg.getBoundingClientRect(); const [x,y,w,h]=state.view;
       const px=(e.clientX-rect.left)/rect.width,py=(e.clientY-rect.top)/rect.height;
-      const factor=e.deltaY>0?1.18:.85; let nw=Math.max(80,Math.min(state.map.viewBox[2]*1.35,w*factor));
+      const factor=e.deltaY>0?1.18:.85; let nw=Math.max(1000,Math.min(state.map.viewBox[2]*1.35,w*factor));
       let nh=nw*(rect.height/rect.width); if(nh>state.map.viewBox[3]*1.5){nh=state.map.viewBox[3]*1.5;nw=nh*(rect.width/rect.height);}
       const mx=x+px*w,my=y+py*h; setView([mx-px*nw,my-py*nh,nw,nh]);
     },{passive:false});
@@ -335,8 +285,10 @@
   async function init(){
     try{
       await loadBase(); bindControls(); fitWorld(); await loadYear(2016);
+      window.__ATLAS_READY__ = true;
+      window.__ATLAS_VALIDATION__ = {status:'pass', regions:state.map.regions.length, year:state.year, nodes:state.data.nodes.length, edges:state.data.edges.length};
     }catch(err){
-      console.error(err); $('toolbarNote').textContent='Failed to load atlas data';
+      console.error(err); window.__ATLAS_READY__ = false; window.__ATLAS_ERROR__ = String(err?.message || err); $('toolbarNote').textContent=`Failed to load atlas data: ${err?.message || err}`;
     }
   }
   init();
