@@ -1,0 +1,121 @@
+{
+  "build": "20260819-clean-v1",
+  "file_count": 24,
+  "files": [
+    {
+      "path": ".nojekyll",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "DATA-NOTES.md",
+      "bytes": 1727,
+      "sha256": "efcb6fb1beebe89e293b3e8eb4cb81aa018c16eb20ecad41f3833b7bf80f46e1"
+    },
+    {
+      "path": "README.md",
+      "bytes": 989,
+      "sha256": "9428e050d8ad14ff7c3eb83cc643b5e5e72fb55d6e56f342407ddc1fb89a23ce"
+    },
+    {
+      "path": "SANITISATION.md",
+      "bytes": 1434,
+      "sha256": "54343f3d4420280c296afd38265cd1ff5e1cfa8ca16773213c5dfc93909562dd"
+    },
+    {
+      "path": "UPLOAD_INSTRUCTIONS_ZH.md",
+      "bytes": 1267,
+      "sha256": "208afae7094f130fe8d27fb84d01279937a4308d047f61ed39d89c193d6e4aaf"
+    },
+    {
+      "path": "assets/app.js",
+      "bytes": 14332,
+      "sha256": "c268eefcf20be12e959be3a140513cf40ba4c989295d02a7c610f74dd07f6b71"
+    },
+    {
+      "path": "assets/styles.css",
+      "bytes": 7921,
+      "sha256": "fa3f1e984e1117366e60184ad5142d0a80465c3fd1938ad39e4bced8487ffe6e"
+    },
+    {
+      "path": "data/map.json",
+      "bytes": 4704999,
+      "sha256": "4e50a0530096220f97f357c97b920f5ac9c9fc96684d261c5dbf8f398b43e052"
+    },
+    {
+      "path": "data/meta.json",
+      "bytes": 2424,
+      "sha256": "46fdce0ba79b11d925ff60366c4616930c3578d8933715a423d9c85258044a74"
+    },
+    {
+      "path": "data/years/2016.json",
+      "bytes": 89671,
+      "sha256": "98315440279272a845202d9c0631cd759822f19783679bc8e710598b5dea46fe"
+    },
+    {
+      "path": "data/years/2017.json",
+      "bytes": 82984,
+      "sha256": "7f32bec2137d5cb46615a514575c7a584e05c3e22728609fe2125a5667c0cf60"
+    },
+    {
+      "path": "data/years/2018.json",
+      "bytes": 105009,
+      "sha256": "7aa80810717c4463f673d71ed4537082c36a0769e28c00c6d22a043b46563799"
+    },
+    {
+      "path": "data/years/2019.json",
+      "bytes": 80672,
+      "sha256": "2127107eb10f6d3311a2677ce7637d6c6015a4cf3d9689dcf6f5cafd8ba3e740"
+    },
+    {
+      "path": "data/years/2020.json",
+      "bytes": 74991,
+      "sha256": "8ad1efc47aa93f0f51012d96742c7b2722a6c4930c3cc709d7ce590d277f8041"
+    },
+    {
+      "path": "data/years/2021.json",
+      "bytes": 66914,
+      "sha256": "583d8aa0159d89652fae27084d86396a87775d02cde587d7424e3e81c6e3f900"
+    },
+    {
+      "path": "data/years/2022.json",
+      "bytes": 84757,
+      "sha256": "5d71bb9558b47b9d1c98f14065b44558e9b4874460b352f19ffef3de0be806fe"
+    },
+    {
+      "path": "data/years/2023.json",
+      "bytes": 121319,
+      "sha256": "8887e63fc18fb66212675c940496685dde3264c817c42cc248c59377e08de836"
+    },
+    {
+      "path": "data/years/2024.json",
+      "bytes": 101630,
+      "sha256": "3a794a78acd105a2a1f3750982c85b82764baa04647077dfa57aa7236d384489"
+    },
+    {
+      "path": "data/years/2025.json",
+      "bytes": 115267,
+      "sha256": "8436d02e19dcd9f09c506c048eaca8141fe195f3f1e4b345d35f04997454d9af"
+    },
+    {
+      "path": "docs/data-and-privacy.html",
+      "bytes": 1835,
+      "sha256": "df0131e032cf77abddf88d927a3d4cfec06cac7a841d4332594daac45b3ff757"
+    },
+    {
+      "path": "docs/manual-upload-validation.json",
+      "bytes": 2388,
+      "sha256": "44f84ca69acb8a0702a8649c0d60adb3b150624eea53ae214c97c8300c61b58e"
+    },
+    {
+      "path": "docs/validation-results.json",
+      "bytes": 1235,
+      "sha256": "7db94796b8e355fa8a8e8bbf2a89eef8009dd82f4136465299053b27451b8cad"
+    },
+    {
+      "path": "index.html",
+      "bytes": 7080,
+      "sha256": "23bb97269343a1a168176aa18a722b76b966bd4e64917d5fa98c0d895cfba85a"
+    }
+  ]
+}
